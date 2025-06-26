@@ -1,12 +1,7 @@
 name: Hprofile Actions
 
-on:
-  push:
-    branches:
-      - master # Or your main branch name, e.g., 'main'
-  pull_request:
-    types: [opened, synchronize, reopened]
-  workflow_dispatch: # Allows manual triggering
+on: 
+  workflow_dispatch:
 
 jobs:
   Testing:
@@ -14,54 +9,31 @@ jobs:
     steps:
       - name: Code checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # Essential for SonarQube to analyze the full history
 
-      - name: Set up Java 11 (Temurin)
-        uses: actions/setup-java@v4 # Updated to v4
+      - name: Set Java 11
+        uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
           java-version: '11'
 
-      - name: Cache SonarQube packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.sonar/cache
-          key: ${{ runner.os }}-sonar
-          restore-keys: ${{ runner.os }}-sonar
+      - name: Maven test
+        run: mvn test
 
-      - name: Cache Maven packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-m2
+      - name: Checkstyle
+        run: mvn checkstyle:checkstyle
 
-      - name: Build, Test, Checkstyle, and Analyze with SonarQube
-        env:
-          # These secrets must be configured in your GitHub repository settings
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_URL: ${{ secrets.SONAR_URL }} # This can also be set in pom.xml properties
-          SONAR_ORGANIZATION: ${{ secrets.SONAR_ORGANIZATION }} # This can also be set in pom.xml properties
-          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }} # This can also be set in pom.xml properties
+      - name: Setup SonarQube
+        uses: warchant/setup-sonar-scanner@v7
+
+      - name: SonarQube Scan
         run: |
-          # Run Maven clean, verify (which includes test, JaCoCo report generation),
-          # and Checkstyle. Then execute the SonarQube analysis goal.
-          # -B (batch mode) for non-interactive execution
-          # -Dsonar.projectKey, sonar.host.url, sonar.login are crucial for SonarQube
-          # -Dsonar.sources: Points to your main source code directory
-          # -Dsonar.java.binaries: Points to your compiled classes (usually target/classes for main code)
-          # -Dsonar.junit.reportsPath: Path to Surefire/Failsafe XML reports
-          # -Dsonar.jacoco.reportsPath: Path to JaCoCo execution data file
-          # -Dsonar.java.checkstyle.reportPaths: Path to Checkstyle XML report
-          mvn -B clean verify \
-            org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-            -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }} \
-            -Dsonar.host.url=${{ env.SONAR_URL }} \
-            -Dsonar.login=${{ env.SONAR_TOKEN }} \
-            -Dsonar.organization=${{ env.SONAR_ORGANIZATION }} \
-            -Dsonar.sources=src/main/java \
-            -Dsonar.java.binaries=target/classes \
+          sonar-scanner \
+            -Dsonar.host.url=${{ secrets.SONAR_URL }} \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
+            -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }} \
+            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }} \
+            -Dsonar.sources=src/ \
             -Dsonar.junit.reportsPath=target/surefire-reports/ \
             -Dsonar.jacoco.reportsPath=target/jacoco.exec \
-            -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml
+            -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml \
+            -Dsonar.java.binaries=target/test-classes/com/visualpathit/account/controllerTest/
